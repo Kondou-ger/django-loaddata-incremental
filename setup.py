@@ -1,7 +1,7 @@
 from distutils.core import setup
 setup(
-    name="loaddata-incremental",
-    packages=["loaddata-incremental"],
+    name="loaddata_incremental",
+    packages=["loaddata_incremental"],
     version='0.1',
     description="Load your django fixtures incrementally",
     author="Christopher Schäpers",

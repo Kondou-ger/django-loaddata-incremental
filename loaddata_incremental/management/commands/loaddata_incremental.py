@@ -37,12 +37,12 @@ class Command(BaseCommand):
         new_count = 0
         changed_count = 0
         for entry in json_data:
+            # Used to avoid saving an object that has no changes
+            different = False
             split_model = entry['model'].split(".")
             model = get_model(split_model[0], split_model[1])
             try:
                 obj = model.objects.get(pk=entry['pk'])
-                # Used to avoid saving an object that has no changes
-                different = False
                 for key, value in entry['fields'].items():
                     if type(value) == list:
                         if list(getattr(obj, key).values_list("pk", flat=True)) != value:
@@ -60,14 +60,38 @@ class Command(BaseCommand):
                         if origtime_without_tz != datetime_obj:
                             setattr(obj, key, value)
                             different = True
+                    elif obj._meta.get_field(key).get_internal_type() == "ForeignKey":
+                        print("fkey")
+                        rel_model = get_model(split_model[0], obj._meta.get_field(key).related_model()._meta.model_name)
+                        rel_obj = rel_model.objects.get(pk=value)
+                        orig_obj = rel_model.objects.get(pk=key)
+                        if orig_obj != rel_obj:
+                            setattr(obj, key, rel_obj)
+                            different = True
                     elif getattr(obj, key) != value:
                         setattr(obj, key, value)
                         different = True
+
                 if different:
                     obj.save()
                     changed_count += 1
+                    different = False
             except model.DoesNotExist:
-                model.objects.create(**entry['fields'])
+                split_model = entry['model'].split(".")
+                model = get_model(split_model[0], split_model[1])
+                many2many = {}
+                popthese = []
+                for key, value in entry['fields'].items():
+                    if model._meta.get_field(key).get_internal_type() == "ManyToManyField":
+                        many2many.update({key: value})
+                        popthese.append(key)
+                for key in popthese:
+                    entry['fields'].pop(key)
+
+                obj = model.objects.create(**entry['fields'])
+                for key, value in many2many.items():
+                    setattr(obj, key, value)
+                obj.save()
                 new_count += 1
 
         self.stdout.write(
